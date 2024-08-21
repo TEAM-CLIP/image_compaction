@@ -1,0 +1,48 @@
+name: Deploy Image Compaction Lambda
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+
+    env:
+      FUNCTION_NAME: "image_compaction"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Configure AWS Credentials For ECR
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: "ap-northeast-2"
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build, tag, and push docker image to ECR
+        id: build-image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ secrets.REPOSITORY }}
+          TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/$REPOSITORY:$TAG .
+          docker push $REGISTRY/$REPOSITORY:$TAG
+          
+          echo "image_name=$REGISTRY/$REPOSITORY:$TAG" >> "$GITHUB_OUTPUT"
+          
+
+      - name: Deploy Lambda
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image_name }}
+        run: |
+            aws lambda update-function-code --function-name $FUNCTION_NAME --image-uri $IMAGE_URI
