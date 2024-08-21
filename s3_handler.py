@@ -13,6 +13,8 @@ class S3ImageCompactSupporter:
         self.default_image_type = 'jpeg'
         self.image_format_supporter = ImageFormatter(self.default_image_type)
 
+        self.image_diff_threshold = 1000
+
         self.image_acl = 'public-read'
 
     def process_s3_metadata(self, event_records):
@@ -42,6 +44,11 @@ class S3ImageCompactSupporter:
 
     def _upload_image(self, bucket_name, key, image_path):
         content_type = 'image/' + self.default_image_type
+
+        old_image_size = self.s3_client.head_object(Bucket=bucket_name, Key=key)['ContentLength']
+        new_image_size = os.path.getsize(image_path)
+        if abs(old_image_size - new_image_size) < self.image_diff_threshold:
+            return
 
         self.s3_client.put_object(Bucket=bucket_name, Key=key, Body=open(image_path, 'rb'), ContentType=content_type)
         os.remove(image_path)
